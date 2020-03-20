@@ -13,6 +13,13 @@ import os.path as path
 import sys
 import string
 
+import numpy as np
+import torch
+import torch.optim as optim
+import torch.nn as nn
+from torchviz import make_dot
+from torch.utils.data import Dataset, TensorDataset, DataLoader
+
 # Dataset class with premises, hypothesis and label
 
 
@@ -49,10 +56,11 @@ def parseXml(xml_file):
 
         # Iterate through all gchildren of root
         for gchild in child:
-            input_child = gchild.text.casefold().translate(str.maketrans('', '', string.punctuation)).split()
+            input_child = gchild.text.casefold().translate(
+                str.maketrans('', '', string.punctuation)).split()
             if len(input_child) > max_len:
                 max_len = len(input_child)
-                        
+
             if gchild.tag == 't':
                 prem.append(input_child)
             if gchild.tag == 'h':
@@ -109,12 +117,13 @@ def encodeData(dataset):
             lab.append(1)
 
     max_len = 0
+
     # See if maxlength is set
-    if len(sys.argv) == 1: # Maxlength not set, default to calculating max length
+    if len(sys.argv) == 1:  # Maxlength not set, default to calculating max length
         max_len = dataset.max_len
-    if len(sys.argv) == 2: # Maxlength is set
-        max_len = sys.argv[1]
-    
+    if len(sys.argv) == 2:  # Maxlength is set
+        max_len = int(sys.argv[1])
+
     for p in prem:
         while len(p) < max_len:
             p.append(0)
@@ -130,6 +139,9 @@ def encodeData(dataset):
 # Driver of the program
 start_time = time.time()
 
+# Try to use GPU for PyTorch, if available; otherwise use CPU
+device = 'cuda' if torch.cuda.is_available() else 'cpu'
+
 # Check if train and test files exist
 if not path.exists("train.xml") or not path.exists("test.xml"):
     raise FileNotFoundError("Train and/or test data not found!")
@@ -138,8 +150,34 @@ if not path.exists("train.xml") or not path.exists("test.xml"):
 train = parseXml("train.xml")
 # Convert to integer encoding
 encodeData(train)
-print(train.dict)
+# Convert to numpy arrays
+train.prem = np.asarray(train.prem)
+train.hyp = np.asarray(train.hyp)
+train.lab = np.asarray(train.lab)
+# Convert to tensors
+x_train_tns = torch.from_numpy(train.prem).float().to(device)
+y_train_tns = torch.from_numpy(train.hyp).float().to(device)
+
+# Initialize TensorDataset and DataLoader
+train_tns = TensorDataset(x_train_tns, y_train_tns)
+train_ldr = DataLoader(dataset=train_tns, batch_size=16, shuffle=True)
+
+
+# Parse test data
 test = parseXml("test.xml")
+# Convert to integer encoding
+encodeData(test)
+# Convert to numpy arrays
+test.prem = np.asarray(test.prem)
+test.hyp = np.asarray(test.hyp)
+test.lab = np.asarray(test.lab)
+# Convert to tensors
+x_test_tns = torch.from_numpy(test.prem).float().to(device)
+y_test_tns = torch.from_numpy(test.hyp).float().to(device)
+
+# Initialize TensorDataset and DataLoader
+test_tns = TensorDataset(x_test_tns, y_test_tns)
+test_ldr = DataLoader(dataset=test_tns, batch_size=16, shuffle=True)
 
 # End of program
 print('-----\n', 'Project 1 took', round(time.time() -

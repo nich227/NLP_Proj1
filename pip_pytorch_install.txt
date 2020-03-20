@@ -1,0 +1,9 @@
+Windows:
+pip install torch===1.4.0 torchvision===0.5.0 -f https://download.pytorch.org/whl/torch_stable.html
+
+Mac:
+pip install torch torchvision
+# MacOS Binaries dont support CUDA, install from source if CUDA is needed
+
+Linux:
+pip install torch torchvision
