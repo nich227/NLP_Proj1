@@ -11,6 +11,7 @@ import time
 import xml.etree.ElementTree as et
 import os.path as path
 import sys
+import string
 
 # Dataset class with premises, hypothesis and label
 
@@ -48,13 +49,10 @@ def parseXml(xml_file):
 
         # Iterate through all gchildren of root
         for gchild in child:
-            input_child = gchild.text.casefold().split()
+            input_child = gchild.text.casefold().translate(str.maketrans('', '', string.punctuation)).split()
             if len(input_child) > max_len:
                 max_len = len(input_child)
-            # Removing periods at end of words
-            for wd in input_child:
-                if wd[-1] == '.':
-                    input_child[input_child.index(wd)] = wd[:-1]
+                        
             if gchild.tag == 't':
                 prem.append(input_child)
             if gchild.tag == 'h':
@@ -140,7 +138,7 @@ if not path.exists("train.xml") or not path.exists("test.xml"):
 train = parseXml("train.xml")
 # Convert to integer encoding
 encodeData(train)
-
+print(train.dict)
 test = parseXml("test.xml")
 
 # End of program
