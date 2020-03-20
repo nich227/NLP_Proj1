@@ -171,6 +171,8 @@ y_test_tns = torch.from_numpy(np.asarray(test.hyp)).float().to(device)
 test_tns = TensorDataset(x_test_tns, y_test_tns)
 test_ldr = DataLoader(dataset=test_tns, batch_size=16, shuffle=True)
 
+print(len(train.dict) == len(test.dict))
+
 # End of program
 print('-----\n', 'Project 1 took', round(time.time() -
                                          start_time, 4), 'seconds to complete.')

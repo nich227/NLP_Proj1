@@ -23,12 +23,11 @@ from torch.utils.data import Dataset, TensorDataset, DataLoader
 
 
 class Dataset:
-    dict = {}
-
     def __init__(self, prem, hyp, lab, max_len):
         self.prem = prem
         self.hyp = hyp
         self.lab = lab
+        self.dict = {}
         self.max_len = max_len
 
 # Function to parse XML file and extract premise, hypothesis and label data. Returns Dataset object.

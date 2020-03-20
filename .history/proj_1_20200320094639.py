@@ -23,12 +23,11 @@ from torch.utils.data import Dataset, TensorDataset, DataLoader
 
 
 class Dataset:
-    dict = {}
-
     def __init__(self, prem, hyp, lab, max_len):
         self.prem = prem
         self.hyp = hyp
         self.lab = lab
+        self.dict = {}
         self.max_len = max_len
 
 # Function to parse XML file and extract premise, hypothesis and label data. Returns Dataset object.
@@ -150,7 +149,7 @@ if not path.exists("train.xml") or not path.exists("test.xml"):
 train = parseXml("train.xml")
 # Convert to integer encoding
 encodeData(train)
-# Convert to tensors (cuda if Nvidia GPU available, cpu otherwise)
+# Convert to tensors
 x_train_tns = torch.from_numpy(np.asarray(train.prem)).float().to(device)
 y_train_tns = torch.from_numpy(np.asarray(train.hyp)).float().to(device)
 
@@ -163,7 +162,7 @@ train_ldr = DataLoader(dataset=train_tns, batch_size=16, shuffle=True)
 test = parseXml("test.xml")
 # Convert to integer encoding
 encodeData(test)
-# Convert to tensors (cuda if Nvidia GPU available, cpu otherwise)
+# Convert to tensors
 x_test_tns = torch.from_numpy(np.asarray(test.prem)).float().to(device)
 y_test_tns = torch.from_numpy(np.asarray(test.hyp)).float().to(device)
 

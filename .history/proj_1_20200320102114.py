@@ -151,8 +151,9 @@ train = parseXml("train.xml")
 # Convert to integer encoding
 encodeData(train)
 # Convert to tensors (cuda if Nvidia GPU available, cpu otherwise)
-x_train_tns = torch.from_numpy(np.asarray(train.prem)).float().to(device)
-y_train_tns = torch.from_numpy(np.asarray(train.hyp)).float().to(device)
+x1_train_tns = torch.from_numpy(np.asarray(train.prem)).float().to(device)
+x2_train_tns = torch.from_numpy(np.asarray(train.hyp)).float().to(device)
+y_train_tns = torch.from_numpy(np.asarray(train.lab)).float().to(device)
 
 # Initialize TensorDataset and DataLoader
 train_tns = TensorDataset(x_train_tns, y_train_tns)

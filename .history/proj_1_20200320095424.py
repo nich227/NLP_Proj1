@@ -23,12 +23,13 @@ from torch.utils.data import Dataset, TensorDataset, DataLoader
 
 
 class Dataset:
-    dict = {}
+    #dict = {}
 
     def __init__(self, prem, hyp, lab, max_len):
         self.prem = prem
         self.hyp = hyp
         self.lab = lab
+        self.dict = {}
         self.max_len = max_len
 
 # Function to parse XML file and extract premise, hypothesis and label data. Returns Dataset object.
@@ -170,6 +171,8 @@ y_test_tns = torch.from_numpy(np.asarray(test.hyp)).float().to(device)
 # Initialize TensorDataset and DataLoader
 test_tns = TensorDataset(x_test_tns, y_test_tns)
 test_ldr = DataLoader(dataset=test_tns, batch_size=16, shuffle=True)
+
+print(train.dict == test.dict)
 
 # End of program
 print('-----\n', 'Project 1 took', round(time.time() -

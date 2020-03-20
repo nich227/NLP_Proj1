@@ -13,10 +13,10 @@ import os.path as path
 import sys
 import string
 
-import numpy as np
 import torch
 import torch.optim as optim
 import torch.nn as nn
+import pandas as pd
 from torch.utils.data import Dataset, TensorDataset, DataLoader
 
 # Dataset class with premises, hypothesis and label
@@ -151,11 +151,11 @@ train = parseXml("train.xml")
 # Convert to integer encoding
 encodeData(train)
 # Convert to tensors (cuda if Nvidia GPU available, cpu otherwise)
-x_train_tns = torch.from_numpy(np.asarray(train.prem)).float().to(device)
-y_train_tns = torch.from_numpy(np.asarray(train.hyp)).float().to(device)
+train_df = pd.DataFrame({'prem': train.prem, 'hyp': train.hyp, 'lab': train.lab})
+train_tns = torch.tensor(train_df.values).float().to(device)
 
 # Initialize TensorDataset and DataLoader
-train_tns = TensorDataset(x_train_tns, y_train_tns)
+train_tns = TensorDataset(train_tns)
 train_ldr = DataLoader(dataset=train_tns, batch_size=16, shuffle=True)
 
 
@@ -164,8 +164,10 @@ test = parseXml("test.xml")
 # Convert to integer encoding
 encodeData(test)
 # Convert to tensors (cuda if Nvidia GPU available, cpu otherwise)
-x_test_tns = torch.from_numpy(np.asarray(test.prem)).float().to(device)
-y_test_tns = torch.from_numpy(np.asarray(test.hyp)).float().to(device)
+x_test_df = pd.DataFrame({'prem': test.prem, 'hyp': test.hyp})
+y_test_df = pd.DataFrame({'lab': test.lab})
+x_test_tns = torch.tensor(x_test_df.values).float().to(device)
+y_test_tns = torch.tensor(y_test_df.values).float().to(device)
 
 # Initialize TensorDataset and DataLoader
 test_tns = TensorDataset(x_test_tns, y_test_tns)
