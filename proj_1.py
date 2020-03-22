@@ -17,19 +17,19 @@ import numpy as np
 import torch
 import torch.optim as optim
 import torch.nn as nn
-from torch.utils.data import Dataset, TensorDataset, DataLoader
+from torch.utils.data import Dataset, TensorDataset, DataLoader, RandomSampler, SequentialSampler
 
 # Dataset class with premises, hypothesis and label
 
 
 class Dataset:
-    dict = {}
 
     def __init__(self, prem, hyp, lab, max_len):
         self.prem = prem
         self.hyp = hyp
         self.lab = lab
         self.max_len = max_len
+        self.dict = {}
 
 # Function to parse XML file and extract premise, hypothesis and label data. Returns Dataset object.
 
@@ -116,14 +116,13 @@ def encodeData(dataset):
         if l == False:
             lab.append(1)
 
-    max_len = 0
+    max_len = dataset.max_len
 
     # See if maxlength is set
-    if len(sys.argv) == 1:  # Maxlength not set, default to calculating max length
-        max_len = dataset.max_len
     if len(sys.argv) == 2:  # Maxlength is set
         max_len = int(sys.argv[1])
 
+    # Appending zeros to make all vectors uniformely large
     for p in prem:
         while len(p) < max_len:
             p.append(0)
@@ -150,26 +149,62 @@ if not path.exists("train.xml") or not path.exists("test.xml"):
 train = parseXml("train.xml")
 # Convert to integer encoding
 encodeData(train)
-# Convert to tensors (cuda if Nvidia GPU available, cpu otherwise)
-x_train_tns = torch.from_numpy(np.asarray(train.prem)).float().to(device)
-y_train_tns = torch.from_numpy(np.asarray(train.hyp)).float().to(device)
+# Convert to tensors
+x1_train_tns = torch.tensor(train.prem)
+x2_train_tns = torch.tensor(train.hyp)
+y_train_tns = torch.tensor(train.lab)
 
 # Initialize TensorDataset and DataLoader
-train_tns = TensorDataset(x_train_tns, y_train_tns)
-train_ldr = DataLoader(dataset=train_tns, batch_size=16, shuffle=True)
+train_tns = TensorDataset(x1_train_tns, x2_train_tns, y_train_tns)
 
+# Random Sampler (for DataLoader)
+train_sampler = RandomSampler(train_tns)
+batch_size = 16
+train_ldr = DataLoader(dataset=train_tns, batch_size=batch_size, sampler=train_sampler)
+
+# Vector embedding
+embed = nn.Embedding(len(train.dict)+1, 500)
+
+for p, h, l in train_ldr:
+    # Going through embedding layer
+    vec_prem = embed(p)
+    vec_hyp = embed(h)
+
+    # LSTM layer
+    input_dim = vec_prem.size()[2]
+    hidden_dim = 100
+    num_layers = 10
+    re_layer = nn.LSTM(input_size=input_dim, hidden_size=hidden_dim,
+                       num_layers=num_layers, batch_first=True)
+    
+    # Creating hidden layer
+    hidden_state = torch.randn(num_layers, vec_prem.size()[0], hidden_dim)
+    cell_state = torch.randn(num_layers, vec_prem.size()[0], hidden_dim)
+    hidden = (hidden_state, cell_state)
+
+    # Putting vectors through recurrent layer
+    h_out_x1, hidden_x1 = re_layer(vec_prem, hidden)
+    h_out_x2, hidden_x2 = re_layer(vec_hyp, hidden)
+
+    # Concatenating hidden vectors
+    cat_tns = torch.cat((hidden_x1[0], hidden_x2[0]), 0)
 
 # Parse test data
 test = parseXml("test.xml")
 # Convert to integer encoding
 encodeData(test)
-# Convert to tensors (cuda if Nvidia GPU available, cpu otherwise)
-x_test_tns = torch.from_numpy(np.asarray(test.prem)).float().to(device)
-y_test_tns = torch.from_numpy(np.asarray(test.hyp)).float().to(device)
+# Convert to tensors
+x1_test_tns = torch.tensor(test.prem)
+x2_test_tns = torch.tensor(test.hyp)
+y_test_tns = torch.tensor(test.lab)
 
 # Initialize TensorDataset and DataLoader
-test_tns = TensorDataset(x_test_tns, y_test_tns)
-test_ldr = DataLoader(dataset=test_tns, batch_size=16, shuffle=True)
+test_tns = TensorDataset(x1_test_tns, x2_test_tns, y_test_tns)
+
+# Random Sampler (for DataLoader)
+test_sampler = SequentialSampler(test_tns)
+batch_size = 16
+test_ldr = DataLoader(dataset=test_tns, batch_size=batch_size, sampler=test_sampler)
 
 # End of program
 print('-----\n', 'Project 1 took', round(time.time() -
