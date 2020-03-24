@@ -31,6 +31,61 @@ class Dataset:
         self.max_len = max_len
         self.dict = {}
 
+# Network class with layers
+
+
+class NNetwork(nn.Module):
+    def __init__(self, dict_size):
+        super().__init__()
+        # Vector embedding
+        self.embed = nn.Embedding(dict_size+1, 500)
+        # Recurrent layer
+        self.lstm = nn.LSTM(input_size=500, hidden_size=100,
+                            num_layers=10, batch_first=True)
+        # Fully connected layer
+        self.fcl = nn.Linear(200, 2)
+        self.softmax = nn.Softmax()
+
+    def forward(self, tns1, tns2):
+        # Pass the input tensor through each operation
+
+        # Embed word tensor to vector
+        tns1 = self.embed(tns1)
+        tns2 = self.embed(tns2)
+
+        # Creating hidden layer
+        hidden_state = torch.randn(10, tns1.size()[0], 100)
+        cell_state = torch.randn(10, tns1.size()[0], 100)
+        hidden = (hidden_state, cell_state)
+        # LSTM layer
+        out1, hidden1 = self.lstm(tns1, hidden)
+        tns1 = out1.squeeze()[:, -1]
+
+        # Creating hidden layer
+        hidden_state = torch.randn(10, tns2.size()[0], 100)
+        cell_state = torch.randn(10, tns2.size()[0], 100)
+        hidden = (hidden_state, cell_state)
+        # LSTM layer
+        out2, hidden2 = self.lstm(tns2, hidden)
+        tns2 = out2.squeeze()[:, -1]
+
+        # Concatenate the two input tensors
+        tns = torch.cat((tns1, tns2), -1)
+
+        # Fully connected layer
+        tns = self.fcl(tns)
+        tns = torch.softmax(tns, dim=1)
+
+        # Converting to predicted classification
+        output_translate = []
+        for tup in tns:
+            if tup[0] > tup[1]:
+                output_translate.append(1)
+            else:
+                output_translate.append(2)
+
+        return torch.tensor(output_translate)
+
 # Function to parse XML file and extract premise, hypothesis and label data. Returns Dataset object.
 
 
@@ -160,34 +215,36 @@ train_tns = TensorDataset(x1_train_tns, x2_train_tns, y_train_tns)
 # Random Sampler (for DataLoader)
 train_sampler = RandomSampler(train_tns)
 batch_size = 16
-train_ldr = DataLoader(dataset=train_tns, batch_size=batch_size, sampler=train_sampler)
+train_ldr = DataLoader(
+    dataset=train_tns, batch_size=batch_size, sampler=train_sampler)
 
-# Vector embedding
-embed = nn.Embedding(len(train.dict)+1, 500)
+model = NNetwork(len(train.dict))
 
+# Put prem and hyp through network for training
 for p, h, l in train_ldr:
-    # Going through embedding layer
-    vec_prem = embed(p)
-    vec_hyp = embed(h)
+    # Define hyperparameters
+    n_epochs = 10
+    lr=0.01
 
-    # LSTM layer
-    input_dim = vec_prem.size()[2]
-    hidden_dim = 100
-    num_layers = 10
-    re_layer = nn.LSTM(input_size=input_dim, hidden_size=hidden_dim,
-                       num_layers=num_layers, batch_first=True)
-    
-    # Creating hidden layer
-    hidden_state = torch.randn(num_layers, vec_prem.size()[0], hidden_dim)
-    cell_state = torch.randn(num_layers, vec_prem.size()[0], hidden_dim)
-    hidden = (hidden_state, cell_state)
+    # Define Loss, Optimizer
+    criterion = nn.CrossEntropyLoss()
+    optimizer = torch.optim.Adam(model.parameters(), lr=lr)
 
-    # Putting vectors through recurrent layer
-    h_out_x1, hidden_x1 = re_layer(vec_prem, hidden)
-    h_out_x2, hidden_x2 = re_layer(vec_hyp, hidden)
+    # Training Run
+    for epoch in range(1, n_epochs + 1):
+        optimizer.zero_grad() # Clears existing gradients from previous epoch
 
-    # Concatenating hidden vectors
-    cat_tns = torch.cat((hidden_x1[0], hidden_x2[0]), 0)
+        output = model(p, h)
+
+        print(output)
+        loss = criterion(output, l)
+        loss.backward() # Does backpropagation and calculates gradients
+        optimizer.step() # Updates the weights accordingly
+        
+        if epoch%10 == 0:
+            print('Epoch: {}/{}.............'.format(epoch, n_epochs), end=' ')
+            print("Loss: {:.4f}".format(loss.item()))
+
 
 # Parse test data
 test = parseXml("test.xml")
@@ -204,7 +261,8 @@ test_tns = TensorDataset(x1_test_tns, x2_test_tns, y_test_tns)
 # Random Sampler (for DataLoader)
 test_sampler = SequentialSampler(test_tns)
 batch_size = 16
-test_ldr = DataLoader(dataset=test_tns, batch_size=batch_size, sampler=test_sampler)
+test_ldr = DataLoader(
+    dataset=test_tns, batch_size=batch_size, sampler=test_sampler)
 
 # End of program
 print('-----\n', 'Project 1 took', round(time.time() -
