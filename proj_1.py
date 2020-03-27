@@ -19,6 +19,8 @@ import torch.optim as optim
 import torch.nn as nn
 from torch.utils.data import Dataset, TensorDataset, DataLoader, RandomSampler, SequentialSampler
 
+from sklearn.metrics import accuracy_score, precision_score, recall_score, f1_score
+
 # Dataset class with premises, hypothesis and label
 
 
@@ -35,56 +37,51 @@ class Dataset:
 
 
 class NNetwork(nn.Module):
-    def __init__(self, dict_size):
+    def __init__(self, dict_size, device):
         super().__init__()
         # Vector embedding
         self.embed = nn.Embedding(dict_size+1, 500)
         # Recurrent layer
         self.lstm = nn.LSTM(input_size=500, hidden_size=100,
-                            num_layers=10, batch_first=True)
+                            num_layers=15, batch_first=True)
         # Fully connected layer
         self.fcl = nn.Linear(200, 2)
         self.softmax = nn.Softmax()
+        self.device = device
 
     def forward(self, tns1, tns2):
         # Pass the input tensor through each operation
+        tns1 = tns1.to(self.device)
+        tns2 = tns2.to(self.device)
 
         # Embed word tensor to vector
         tns1 = self.embed(tns1)
         tns2 = self.embed(tns2)
 
         # Creating hidden layer
-        hidden_state = torch.randn(10, tns1.size()[0], 100)
-        cell_state = torch.randn(10, tns1.size()[0], 100)
+        hidden_state = torch.randn(15, tns1.size()[0], 100).to(self.device)
+        cell_state = torch.randn(15, tns1.size()[0], 100).to(self.device)
         hidden = (hidden_state, cell_state)
         # LSTM layer
         out1, hidden1 = self.lstm(tns1, hidden)
         tns1 = out1.squeeze()[:, -1]
 
         # Creating hidden layer
-        hidden_state = torch.randn(10, tns2.size()[0], 100)
-        cell_state = torch.randn(10, tns2.size()[0], 100)
+        hidden_state = torch.randn(15, tns2.size()[0], 100).to(self.device)
+        cell_state = torch.randn(15, tns2.size()[0], 100).to(self.device)
         hidden = (hidden_state, cell_state)
         # LSTM layer
         out2, hidden2 = self.lstm(tns2, hidden)
         tns2 = out2.squeeze()[:, -1]
 
         # Concatenate the two input tensors
-        tns = torch.cat((tns1, tns2), -1)
+        tns = torch.cat((tns1, tns2), 1)
 
         # Fully connected layer
         tns = self.fcl(tns)
         tns = torch.softmax(tns, dim=1)
 
-        # Converting to predicted classification
-        output_translate = []
-        for tup in tns:
-            if tup[0] > tup[1]:
-                output_translate.append(1)
-            else:
-                output_translate.append(2)
-
-        return torch.tensor(output_translate)
+        return tns
 
 # Function to parse XML file and extract premise, hypothesis and label data. Returns Dataset object.
 
@@ -218,30 +215,42 @@ batch_size = 16
 train_ldr = DataLoader(
     dataset=train_tns, batch_size=batch_size, sampler=train_sampler)
 
-model = NNetwork(len(train.dict))
+model = NNetwork(len(train.dict), device).to(device)
 
 # Put prem and hyp through network for training
 for p, h, l in train_ldr:
+
     # Define hyperparameters
-    n_epochs = 10
-    lr=0.01
+    n_epochs = 20
+    lr = 0.001
+    momentum = 0.9
 
     # Define Loss, Optimizer
-    criterion = nn.CrossEntropyLoss()
-    optimizer = torch.optim.Adam(model.parameters(), lr=lr)
+    criterion = nn.CrossEntropyLoss().to(device)
+    optimizer = torch.optim.SGD(model.parameters(), lr=lr, momentum=momentum)
 
     # Training Run
     for epoch in range(1, n_epochs + 1):
-        optimizer.zero_grad() # Clears existing gradients from previous epoch
+        optimizer.zero_grad()  # Clears existing gradients from previous epoch
 
         output = model(p, h)
 
-        print(output)
-        loss = criterion(output, l)
-        loss.backward() # Does backpropagation and calculates gradients
-        optimizer.step() # Updates the weights accordingly
-        
-        if epoch%10 == 0:
+        # Convert to indexes to calculate loss
+        lab_compare = []
+        for la in l:
+            if la == 1:
+                lab_compare.append(0)
+            if la == 2:
+                lab_compare.append(1)
+        lab_compare = torch.tensor(lab_compare).to(device)
+        output = output.to(device)
+
+        # calculating loss
+        loss = criterion(output, lab_compare)
+        loss.backward()  # Does backpropagation and calculates gradients
+        optimizer.step()  # Updates the weights accordingly
+
+        if epoch % 10 == 0:
             print('Epoch: {}/{}.............'.format(epoch, n_epochs), end=' ')
             print("Loss: {:.4f}".format(loss.item()))
 
@@ -263,6 +272,30 @@ test_sampler = SequentialSampler(test_tns)
 batch_size = 16
 test_ldr = DataLoader(
     dataset=test_tns, batch_size=batch_size, sampler=test_sampler)
+
+# Put prem and hyp through network for test
+inference_time = time.time()
+for p, h, l in train_ldr:
+    calculated = model(p, h).cpu()
+
+    l_cal = []
+    for cal in calculated:
+        if cal[0] > cal[1]:
+            l_cal.append(1)
+        else:
+            l_cal.append(2)
+
+    # Report performance
+    print('---------------')
+    print('| Performance |')
+    print('---------------')
+    print('Accuracy score: ', accuracy_score(l_cal, l.tolist()))
+    print('Precision score: ', precision_score(l_cal, l.tolist()))
+    print('Recall score: ', recall_score(l_cal, l.tolist()))
+    print('F1 score: ', f1_score(l_cal, l.tolist()))
+
+print('---------------')
+print('Throughput: ', round(time.time() - inference_time, 4), 'seconds')
 
 # End of program
 print('-----\n', 'Project 1 took', round(time.time() -
