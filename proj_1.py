@@ -42,10 +42,10 @@ class NNetwork(nn.Module):
         # Vector embedding
         self.embed = nn.Embedding(dict_size+1, 500)
         # Recurrent layer
-        self.lstm = nn.LSTM(input_size=500, hidden_size=100,
+        self.lstm = nn.LSTM(input_size=500, hidden_size=256,
                             num_layers=15, batch_first=True)
         # Fully connected layer
-        self.fcl = nn.Linear(200, 2)
+        self.fcl = nn.Linear(512, 2)
         self.softmax = nn.Softmax()
         self.device = device
 
@@ -59,16 +59,16 @@ class NNetwork(nn.Module):
         tns2 = self.embed(tns2)
 
         # Creating hidden layer
-        hidden_state = torch.randn(15, tns1.size()[0], 100).to(self.device)
-        cell_state = torch.randn(15, tns1.size()[0], 100).to(self.device)
+        hidden_state = torch.randn(15, tns1.size()[0], 256).to(self.device)
+        cell_state = torch.randn(15, tns1.size()[0], 256).to(self.device)
         hidden = (hidden_state, cell_state)
         # LSTM layer
         out1, hidden1 = self.lstm(tns1, hidden)
         tns1 = out1.squeeze()[:, -1]
 
         # Creating hidden layer
-        hidden_state = torch.randn(15, tns2.size()[0], 100).to(self.device)
-        cell_state = torch.randn(15, tns2.size()[0], 100).to(self.device)
+        hidden_state = torch.randn(15, tns2.size()[0], 256).to(self.device)
+        cell_state = torch.randn(15, tns2.size()[0], 256).to(self.device)
         hidden = (hidden_state, cell_state)
         # LSTM layer
         out2, hidden2 = self.lstm(tns2, hidden)
@@ -123,13 +123,17 @@ def parseXml(xml_file):
 # Convert words into integers and record in the dictionary
 
 
-def encodeData(dataset):
+def encodeData(dataset, dict=None):
     # Iterator for word
     i_wd = 1
 
     prem = []
     hyp = []
     lab = []
+
+    # Dictionary passed in (test set)
+    if dict is not None:
+        dataset.dict = dict.copy()
 
     # Iterate through prem
     for p in dataset.prem:
@@ -151,7 +155,7 @@ def encodeData(dataset):
         sentence = []
         for wd in h:
             # Add word to dictionary if not already in there
-            if wd not in dataset.dict.values():
+            if wd not in dataset.dict.values() and dict is None:
                 dataset.dict.update({i_wd: wd.casefold()})
                 i_wd += 1
 
@@ -159,6 +163,9 @@ def encodeData(dataset):
             for key, val in dataset.dict.items():
                 if val == wd.casefold():
                     sentence.append(key)
+
+
+
         hyp.append(sentence)
 
     # Iterate through lab
@@ -189,6 +196,7 @@ def encodeData(dataset):
 
 # Driver of the program
 start_time = time.time()
+torch.manual_seed(0)
 
 # Try to use GPU for PyTorch, if available; otherwise use CPU
 device = 'cuda' if torch.cuda.is_available() else 'cpu'
@@ -217,23 +225,21 @@ train_ldr = DataLoader(
 
 model = NNetwork(len(train.dict), device).to(device)
 
+# Define hyperparameters
+n_epochs = 20
+
+# Define Loss, Optimizer
+criterion = nn.CrossEntropyLoss().to(device)
+optimizer = optim.Adam(model.parameters(), lr=0.001)
+
 # Put prem and hyp through network for training
 for p, h, l in train_ldr:
-
-    # Define hyperparameters
-    n_epochs = 20
-    lr = 0.001
-    momentum = 0.9
-
-    # Define Loss, Optimizer
-    criterion = nn.CrossEntropyLoss().to(device)
-    optimizer = torch.optim.SGD(model.parameters(), lr=lr, momentum=momentum)
 
     # Training Run
     for epoch in range(1, n_epochs + 1):
         optimizer.zero_grad()  # Clears existing gradients from previous epoch
 
-        output = model(p, h)
+        output = model(p, h).to(device)
 
         # Convert to indexes to calculate loss
         lab_compare = []
@@ -243,7 +249,6 @@ for p, h, l in train_ldr:
             if la == 2:
                 lab_compare.append(1)
         lab_compare = torch.tensor(lab_compare).to(device)
-        output = output.to(device)
 
         # calculating loss
         loss = criterion(output, lab_compare)
@@ -258,7 +263,7 @@ for p, h, l in train_ldr:
 # Parse test data
 test = parseXml("test.xml")
 # Convert to integer encoding
-encodeData(test)
+encodeData(test, train.dict)
 # Convert to tensors
 x1_test_tns = torch.tensor(test.prem)
 x2_test_tns = torch.tensor(test.hyp)
@@ -274,9 +279,13 @@ test_ldr = DataLoader(
     dataset=test_tns, batch_size=batch_size, sampler=test_sampler)
 
 # Put prem and hyp through network for test
-inference_time = time.time()
+
 for p, h, l in train_ldr:
+    inference_time = time.time()
     calculated = model(p, h).cpu()
+    print('---------------')
+    print('Throughput: ', round(time.time() - inference_time, 4), 'seconds')
+    print('---------------')
 
     l_cal = []
     for cal in calculated:
@@ -286,6 +295,8 @@ for p, h, l in train_ldr:
             l_cal.append(2)
 
     # Report performance
+    print('Predicted:\t', l_cal)
+    print('Actual:\t\t', l.tolist())
     print('---------------')
     print('| Performance |')
     print('---------------')
@@ -293,9 +304,7 @@ for p, h, l in train_ldr:
     print('Precision score: ', precision_score(l_cal, l.tolist()))
     print('Recall score: ', recall_score(l_cal, l.tolist()))
     print('F1 score: ', f1_score(l_cal, l.tolist()))
-
-print('---------------')
-print('Throughput: ', round(time.time() - inference_time, 4), 'seconds')
+    print('---------------\n')
 
 # End of program
 print('-----\n', 'Project 1 took', round(time.time() -
