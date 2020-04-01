@@ -37,15 +37,20 @@ class Dataset:
 
 
 class NNetwork(nn.Module):
+    # Model parameters (constants, change here)
+    num_layers = 15
+    hidden_size = 256
+    embed_size = 750
+    
     def __init__(self, dict_size, device):
         super().__init__()
         # Vector embedding
-        self.embed = nn.Embedding(dict_size+1, 500)
+        self.embed = nn.Embedding(dict_size+1, self.embed_size)
         # Recurrent layer
-        self.lstm = nn.LSTM(input_size=500, hidden_size=256,
-                            num_layers=15, batch_first=True)
+        self.lstm = nn.LSTM(input_size=self.embed_size, hidden_size=self.hidden_size,
+                            num_layers=self.num_layers, batch_first=True)
         # Fully connected layer
-        self.fcl = nn.Linear(512, 2)
+        self.fcl = nn.Linear(self.hidden_size*2, 2)
         self.softmax = nn.Softmax()
         self.device = device
 
@@ -59,16 +64,16 @@ class NNetwork(nn.Module):
         tns2 = self.embed(tns2)
 
         # Creating hidden layer
-        hidden_state = torch.randn(15, tns1.size()[0], 256).to(self.device)
-        cell_state = torch.randn(15, tns1.size()[0], 256).to(self.device)
+        hidden_state = torch.randn(self.num_layers, tns1.size()[0], self.hidden_size).to(self.device)
+        cell_state = torch.randn(self.num_layers, tns1.size()[0], self.hidden_size).to(self.device)
         hidden = (hidden_state, cell_state)
         # LSTM layer
         out1, hidden1 = self.lstm(tns1, hidden)
         tns1 = out1.squeeze()[:, -1]
 
         # Creating hidden layer
-        hidden_state = torch.randn(15, tns2.size()[0], 256).to(self.device)
-        cell_state = torch.randn(15, tns2.size()[0], 256).to(self.device)
+        hidden_state = torch.randn(self.num_layers, tns2.size()[0], self.hidden_size).to(self.device)
+        cell_state = torch.randn(self.num_layers, tns2.size()[0], self.hidden_size).to(self.device)
         hidden = (hidden_state, cell_state)
         # LSTM layer
         out2, hidden2 = self.lstm(tns2, hidden)
@@ -280,11 +285,15 @@ test_ldr = DataLoader(
 
 # Put prem and hyp through network for test
 
+avg_perform = [0,0,0,0,0]
+total_batches = 0
+
 for p, h, l in train_ldr:
     inference_time = time.time()
     calculated = model(p, h).cpu()
+    throughput = round(time.time() - inference_time, 4)
     print('---------------')
-    print('Throughput: ', round(time.time() - inference_time, 4), 'seconds')
+    print('Throughput: ', throughput, 'seconds')
     print('---------------')
 
     l_cal = []
@@ -305,6 +314,22 @@ for p, h, l in train_ldr:
     print('Recall score: ', recall_score(l_cal, l.tolist()))
     print('F1 score: ', f1_score(l_cal, l.tolist()))
     print('---------------\n')
+    
+    avg_perform[0] += accuracy_score(l_cal, l.tolist())
+    avg_perform[1] += precision_score(l_cal, l.tolist())
+    avg_perform[2] += recall_score(l_cal, l.tolist())
+    avg_perform[3] += f1_score(l_cal, l.tolist())
+    avg_perform[4] += throughput
+    total_batches += 1.0
+
+print('\n---------------------')
+print('| Performance (avg) |')
+print('---------------------')
+print('Accuracy score: ', avg_perform[0]/total_batches)
+print('Precision score: ', avg_perform[1]/total_batches)
+print('Recall score: ', avg_perform[2]/total_batches)
+print('F1 score: ', avg_perform[3]/total_batches, '\n')
+print('Throughput: ', avg_perform[4]/total_batches, '\n')
 
 # End of program
 print('-----\n', 'Project 1 took', round(time.time() -
